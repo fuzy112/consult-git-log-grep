@@ -32,6 +32,19 @@
 
 (require 'consult)
 
+(defcustom consult-git-log-grep-args
+  '("git" "--no-pager" "log"
+    ;; use git log's formattings padding/truncating for
+    ;; better performance (less lisp string processing)
+    "--pretty=format:%H@@@%<(76,mtrunc)%s@@@%aN@@@%ad"
+    "--date=format:%Y-%m-%d\ %H:%M:%S"
+    "--all-match"
+    "--regexp-ignore-case" "--extended-regexp")
+  "Command line arguments for git-log.
+The dynamically computed arguments are appended.
+Can be either a string, or a list of strings or expressions."
+  :type '(choice string (repeat (choice string sexp))))
+
 (defcustom consult-git-log-grep-open-function #'consult-git-log-grep-show-commit
   "The function used to open the selected candidate."
   :package-version '(consult-git-log-grep . "1.0.0")
@@ -86,22 +99,25 @@
         (add-text-properties 0 (length suffix) '(invisible t consult-strip t) suffix)
         (list (cons (concat msg suffix) sha))))))
 
-
-(defun consult-git-log-grep--builder (input)
-  "Build the command using INPUT and supply the highlight function."
-  (pcase-let ((`(,arg . ,opts) (consult--command-split input)))
-    (cons (append (list
-                   "git"
-                   "--no-pager"
-                   "log"
-                   ;; use git log's formattings padding/truncating for
-                   ;; better performance (less lisp string processing)
-                   "--pretty=format:%H@@@%<(76,mtrunc)%s@@@%aN@@@%ad"
-                   "--date=format:%Y-%m-%d %H:%M:%S"
-                   "-i"
-                   "--grep")
-                  (list arg) opts)
-          (cdr (consult--default-regexp-compiler input 'ignore-case t)))))
+(defun consult-git-log-grep---make-builder (paths)
+  "Create git log grep command line builder given PATHS."
+  (let ((cmd (consult--build-args consult-git-log-grep-args)))
+    (lambda (input)
+      (pcase-let* ((`(,arg . ,opts) (consult--command-split input))
+                   (flags (append cmd opts))
+                   (ignore-case (or (member "-i" flags) (member "--regexp-ignore-case" flags)))
+                   (type (cond ((or (member "-E" flags) (member "--extended-regexp" flags)) 'extended)
+                               ((or (member "-P" flags) (member "--perl-regexp" flags)) 'pcre)
+                               (t 'basic))))
+        (if (or (member "-F" flags) (member "--fixed-strings" flags))
+            (cons (append cmd (list "--grep" arg) opts '("--") paths)
+                  (apply-partially #'consult--highlight-literals arg ignore-case))
+          (pcase-let ((`(,re . ,hl) (funcall consult--regexp-compiler arg type ignore-case)))
+            (when re
+              (cons (append cmd
+                            (mapcan (apply-partially #'list "--grep") re)
+                            opts '("--") paths)
+                    hl))))))))
 
 (defun consult-git-log-grep-result-annotator (cand)
   "Annotate the current candidate CAND using its text-properties."
@@ -116,27 +132,26 @@
 
 
 ;;;###autoload
-(defun consult-git-log-grep (&optional initial)
-  "Search the git log using 'git log --grep' starting with INITIAL input."
-  (interactive)
-  (unless (locate-dominating-file default-directory ".git")
-    (user-error "Not in a git repository"))
-  (when-let ((result (consult--read
-                      (consult--async-pipeline
-                       (consult--async-process #'consult-git-log-grep--builder)
-                       (consult--async-transform #'consult-git-log-grep--format)
-                       (consult--async-highlight #'consult-git-log-grep--builder))
-                      :prompt "Commit Subject: "
-                      :require-match t
-                      :sort nil
-                      :lookup #'consult--lookup-cdr
-                      :category 'consult-git-log-grep-result
-                      :annotate 'consult-git-log-grep-result-annotator
-                      :initial initial
-                      :add-history (thing-at-point 'symbol)
-                      :history '(:input consult-git-log-grep--history)
-                      :state #'consult-git-log-grep--preview
-                      )))
+(defun consult-git-log-grep (&optional dir initial)
+  "Search the git log using 'git log --grep' in DIR starting with INITIAL input."
+  (interactive "P")
+  (pcase-let* ((`(,prompt ,paths ,dir) (consult--directory-prompt "Commit Subject" dir))
+               (default-directory dir)
+               (builder (consult-git-log-grep---make-builder paths))
+               (result (consult--read
+                        (consult--process-collection builder
+                          :transform (consult--async-transform #'consult-git-log-grep--format)
+                          :highlight t)
+                        :prompt prompt
+                        :require-match t
+                        :sort nil
+                        :lookup #'consult--lookup-cdr
+                        :category 'consult-git-log-grep-result
+                        :annotate 'consult-git-log-grep-result-annotator
+                        :initial initial
+                        :add-history (thing-at-point 'symbol)
+                        :history '(:input consult-git-log-grep--history)
+                        :state #'consult-git-log-grep--preview)))
     (funcall consult-git-log-grep-open-function result)))
 
 (defun consult-git-log-grep--preview (action cand)
