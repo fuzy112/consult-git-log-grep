@@ -55,6 +55,13 @@ Can be either a string, or a list of strings or expressions."
   :group 'consult-git-log-grep
   :type '(function :tag "Function"))
 
+(defcustom consult-git-log-grep-embark-exporter #'consult-git-log-grep--export-vc-log
+  "The embark exporter used for `consult-git-log-grep-result'"
+  :group 'consult-git-log-grep
+  :type '(choice (const :tag "Export to VC log buffers" consult-git-log-grep--export-vc-log)
+                 (const :tag "Export to `magit-log' buffers" consult-git-log-grep--export-magit-log)
+                 (function :tag "Custom function")))
+
 (defcustom consult-git-log-grep-preview nil
   "Whether to show a preview of the selected candidate"
   :package-version '(consult-git-log-grep . "1.3.0")
@@ -163,6 +170,32 @@ Can be either a string, or a list of strings or expressions."
        consult-git-log-grep-preview
        (eq action 'preview)
        (funcall consult-git-log-grep-open-function cand)))
+
+(declare-function vc-print-log-internal "vc")
+(defun consult-git-log-grep--export-vc-log (revs)
+  (require 'vc)
+  (defvar vc-git-log-switches)
+  (defvar vc-log-short-style)
+  (let* ((default-directory (vc-root-dir))
+         ;; abusing `vc-git-log-switches' to pass multiple revisions
+         (vc-git-log-switches (append (list "--no-walk") revs))
+         (vc-log-short-style nil))
+    (vc-print-log-internal 'Git (list default-directory) (car revs) t nil)))
+
+(declare-function magit-log-setup-buffer "ext:magit-log")
+
+(defun consult-git-log-grep--export-magit-log (revs)
+  (require 'magit-log)
+  (set-buffer (magit-log-setup-buffer revs '("--no-walk") nil)))
+
+(defun consult-git-log-grep--embark-export (commits)
+  (let ((revs (mapcar (lambda (c) (alist-get 'sha (get-text-property 0 'consult-log-grep--metadata c)))
+                      commits)))
+    (funcall consult-git-log-grep-embark-exporter revs)))
+
+(defvar embark-exporters-alist)
+(with-eval-after-load 'embark
+  (setf (alist-get 'consult-git-log-grep-result embark-exporters-alist) #'consult-git-log-grep--embark-export))
 
 (provide 'consult-git-log-grep)
 ;;; consult-git-log-grep.el ends here
