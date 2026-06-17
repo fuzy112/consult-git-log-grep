@@ -186,7 +186,12 @@ Can be either a string, or a list of strings or expressions."
 
 (defun consult-git-log-grep--export-magit-log (revs)
   (require 'magit-log)
-  (set-buffer (magit-log-setup-buffer revs '("--no-walk") nil)))
+  (set-buffer (magit-log-setup-buffer revs '("--no-walk") nil))
+  (use-local-map
+   (make-composed-keymap
+    (define-keymap
+      "<remap> <magit-refresh>" #'embark-rerun-collect-or-export)
+    (current-local-map))))
 
 (defun consult-git-log-grep--embark-export (commits)
   (let ((revs (mapcar (lambda (c) (alist-get 'sha (get-text-property 0 'consult-log-grep--metadata c)))
