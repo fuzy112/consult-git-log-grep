@@ -32,6 +32,10 @@
 
 (require 'consult)
 
+(defgroup consult-git-log-grep ()
+  "Consult git log grep."
+  :group 'consult)
+
 (defcustom consult-git-log-grep-args
   '("git" "--no-pager" "log"
     ;; use git log's formattings padding/truncating for
@@ -59,23 +63,23 @@ Can be either a string, or a list of strings or expressions."
 
 (defface consult-git-log-grep-sha
   '((t :inherit font-lock-keyword-face))
-  "Face used to highlight the commit sha in 'consult-git-log-grep'."
+  "Face used to highlight the commit sha in `consult-git-log-grep'."
   :group 'consult-git-log-grep)
 
 (defface consult-git-log-grep-author
   '((t :inherit completions-annotations))
-  "Face used to highlight the author in 'consult-git-log-grep'."
+  "Face used to highlight the author in `consult-git-log-grep'."
   :group 'consult-git-log-grep)
 
 (defface consult-git-log-grep-datetime
   '((t :inherit completions-annotations))
-  "Face used to highlight the datetime in 'consult-git-log-grep'."
+  "Face used to highlight the datetime in `consult-git-log-grep'."
   :group 'consult-git-log-grep)
 
 (defvar consult-git-log-grep--history nil)
 
 (defun consult-git-log-grep-show-commit (sha)
-  "Displays the result of 'git show SHA' in a new buffer."
+  "Displays the result of \\='git show SHA' in a new buffer."
   (let* ((short-sha (truncate-string-to-width sha 8))
          (buf (get-buffer-create (format "consult-git-log-grep-commit-%s" short-sha))))
     (shell-command (format "git --no-pager show %s" sha) buf)))
@@ -121,7 +125,7 @@ Can be either a string, or a list of strings or expressions."
 
 (defun consult-git-log-grep-result-annotator (cand)
   "Annotate the current candidate CAND using its text-properties."
-  (when-let (metadata (get-text-property 0 'consult-log-grep--metadata cand))
+  (when-let* ((metadata (get-text-property 0 'consult-log-grep--metadata cand)))
     (let ((shortsha (truncate-string-to-width (cdr (assoc 'sha metadata)) 8))
           (datetime (cdr (assoc 'datetime metadata)))
           (author (cdr (assoc 'author metadata))))
@@ -133,7 +137,7 @@ Can be either a string, or a list of strings or expressions."
 
 ;;;###autoload
 (defun consult-git-log-grep (&optional dir initial)
-  "Search the git log using 'git log --grep' in DIR starting with INITIAL input."
+  "Search the git log using \\='git log --grep' in DIR starting with INITIAL input."
   (interactive "P")
   (pcase-let* ((`(,prompt ,paths ,dir) (consult--directory-prompt "Commit Subject" dir))
                (default-directory dir)
