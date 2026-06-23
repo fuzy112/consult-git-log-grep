@@ -193,14 +193,21 @@ Can be either a string, or a list of strings or expressions."
       "<remap> <magit-refresh>" #'embark-rerun-collect-or-export)
     (current-local-map))))
 
+(defun consult-git-log-grep--sha (cand)
+  (alist-get 'sha (get-text-property 0 'consult-log-grep--metadata cand)))
+
 (defun consult-git-log-grep--embark-export (commits)
-  (let ((revs (mapcar (lambda (c) (alist-get 'sha (get-text-property 0 'consult-log-grep--metadata c)))
-                      commits)))
+  (let ((revs (mapcar #'consult-git-log-grep--sha commits)))
     (funcall consult-git-log-grep-embark-exporter revs)))
+
+(defun consult-git-log-grep-open (commit)
+  (let ((sha (consult-git-log-grep--sha commit)))
+    (funcall consult-git-log-grep-open-function sha)))
 
 (defvar embark-exporters-alist)
 (with-eval-after-load 'embark
-  (setf (alist-get 'consult-git-log-grep-result embark-exporters-alist) #'consult-git-log-grep--embark-export))
+  (setf (alist-get 'consult-git-log-grep-result embark-exporters-alist) #'consult-git-log-grep--embark-export)
+  (setf (alist-get 'consult-git-log-grep-result embark-default-action-overrides) #'consult-git-log-grep-open))
 
 (provide 'consult-git-log-grep)
 ;;; consult-git-log-grep.el ends here
